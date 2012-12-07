@@ -1,0 +1,15 @@
+# ~/.glacier-backup or DIR/.glacier-backup/config
+
+# vault (should be in DIR/.glacier-backup/config)
+vault = test
+
+# AWS credentials
+aws_access_key_id = 1234567890ABCDEFHGHJ
+aws_secret_access_key = 12345678901234567890QWERTYUIOPPASDFGHJJK
+
+# proxy server
+proxy = proxy.net
+proxy_port = 8080
+
+# max number of entries in *.db files
+dbfile_size = 20
