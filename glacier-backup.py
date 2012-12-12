@@ -178,7 +178,7 @@ def backup(d):
             dbfile = create_dbfile(cfg_dir)
             logging.debug("using db file %s", dbfile)
         try:
-            archive_id = vault.create_archive_from_file(filename=f.file_path, description=f.file_name)
+            archive_id = vault.upload_archive(f.file_path, description=f.file_name)
         except Exception, e:
             logging.warning("failed to upload %s: %s", file_name, e)
             continue
