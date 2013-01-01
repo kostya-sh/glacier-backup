@@ -188,7 +188,7 @@ def backup(d):
         f.archive_id = archive_id
         f.backup_time = time.time()
         f.write(dbfile)
-        logging.info("%s uploaded", f.file_name)
+        logging.info("[%d/%d] %s uploaded", i+1, len(files_to_upload), f.file_name)
 
 if __name__ == "__main__":
     level = logging.INFO
