@@ -1,7 +1,7 @@
 Dependencies
 ------------
-python 2.4
-boto 2.6.0-dev
+python 2.5
+boto 2.6-dev (not 2.6.0)
 
 Usage
 -----
