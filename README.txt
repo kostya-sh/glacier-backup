@@ -5,7 +5,10 @@ boto 2.6-dev (not 2.6.0)
 
 Usage
 -----
-glacier-backup.py directory
+glacier-backup.py directory [-compact]
+
+if -compact flag is specified then all *.db files in the config directory will be
+merged together (duplicates are removed) into one db file.
 
 Configuration
 -------------
