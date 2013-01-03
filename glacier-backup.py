@@ -72,10 +72,11 @@ class File:
             digest=parts[4],
             size=int(parts[5]) if len(parts) > 5 else -1)
 
-    def write(self, f):
+    def write(self, f, flush=True):
         f.write(str(self))
         f.write('\n')
-        f.flush()
+        if flush:
+            f.flush()
 
     def __str__(self):
         return "%s\t%s\t%f\t%f\t%s\t%d" % (self.file_name, self.archive_id, self.modified_time, self.backup_time, self.digest, self.size)
@@ -206,6 +207,22 @@ def backup(d):
         logging.info("done: %s of %s (%.1f%%)", fmt_filesize(uploaded_size), fmt_filesize(total_size),
             float(uploaded_size)/total_size*100)
 
+def compact(d):
+    cfg_dir = os.path.join(d, CFG_DIR)
+    uploaded_files = list(read_uploaded_files(cfg_dir).values())
+    uploaded_files.sort(key = lambda f: f.backup_time)
+    dbfiles = [fn for fn in os.listdir(cfg_dir) if fn.endswith(".db")]
+    dbfile = create_dbfile(cfg_dir)
+    logging.info("compacting %d *.db file(s) to %s", len(dbfiles), dbfile)
+    for f in uploaded_files:
+        if f.size < 0:
+            st = os.stat(f.file_path)
+            f.size = st.st_size
+        f.write(dbfile, flush=False)
+    dbfile.close()
+    for dbf in dbfiles:
+        os.remove(os.path.join(cfg_dir, dbf))
+
 if __name__ == "__main__":
     level = logging.INFO
     if DEBUG > 0:
@@ -214,3 +231,5 @@ if __name__ == "__main__":
 
     d = sys.argv[1]
     backup(d)
+    if len(sys.argv) > 2 and sys.argv[2] == "-compact":
+        compact(d)
