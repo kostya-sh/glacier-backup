@@ -23,6 +23,12 @@ def calc_digest(f):
     m.update(open(f, 'r').read()) # TODO: read in chunks
     return m.hexdigest()
 
+def fmt_filesize(num):
+    for x in ['bytes','KB','MB','GB','TB']:
+        if num < 1024.0:
+            return "%3.1f %s" % (num, x)
+        num /= 1024.0
+
 class Config:
      def __init__(self, dir_cfg_file):
         dir_cfg = parse_cfg_file(dir_cfg_file)
@@ -46,13 +52,14 @@ class Config:
         logging.debug("DIRECTORY CONFIG: %s", dir_cfg)
 
 class File:
-    def __init__(self, file_path, file_name, archive_id=None, modified_time=None, backup_time=None, digest=None):
+    def __init__(self, file_path, file_name, archive_id=None, modified_time=None, backup_time=None, digest=None, size=-1):
         self.file_name = file_name
         self.file_path = file_path
         self.archive_id = archive_id
         self.modified_time = modified_time
         self.backup_time = backup_time
         self.digest = digest
+        self.size = size
 
     @staticmethod
     def parse(line, file_path):
@@ -62,14 +69,16 @@ class File:
             archive_id=parts[1],
             modified_time=float(parts[2]),
             backup_time=float(parts[3]),
-            digest=parts[4])
+            digest=parts[4],
+            size=int(parts[5]) if len(parts) > 5 else -1)
 
     def write(self, f):
         f.write(str(self))
         f.write('\n')
+        f.flush()
 
     def __str__(self):
-        return "%s\t%s\t%f\t%f\t%s" % (self.file_name, self.archive_id, self.modified_time, self.backup_time, self.digest)
+        return "%s\t%s\t%f\t%f\t%s\t%d" % (self.file_name, self.archive_id, self.modified_time, self.backup_time, self.digest, self.size)
 
 def read_uploaded_files(d):
     res = {}
@@ -124,7 +133,7 @@ def backup(d):
         for file_path in [os.path.join(root, name) for name in files]:
             st = os.stat(file_path)
             file_name = extract_filename(d, file_path)
-            f = File(file_path, file_name, modified_time=st.st_mtime)
+            f = File(file_path, file_name, modified_time=st.st_mtime, size=st.st_size)
             existing_file = uploaded_files.get(file_name)
             if existing_file is None:
                 logging.info("new file: %s (modified_time = %f)", file_name, st.st_mtime)
@@ -152,7 +161,7 @@ def backup(d):
             dirs.remove(CFG_DIR) # do not visit .glacier-backup directory
 
     if len(files_to_update) != 0:
-        dbfile = create_dbfile(cfg_dir) 
+        dbfile = create_dbfile(cfg_dir)
         for f in files_to_update:
             f.write(dbfile)
         dbfile.close()
@@ -171,12 +180,10 @@ def backup(d):
 
     # upload files
     dbfile = None
+    uploaded_size = 0
+    total_size = sum([f.size for f in files_to_upload])
     for (i, f) in enumerate(files_to_upload):
-        if i % cfg.dbfile_size == 0:
-            if dbfile is not None:
-                dbfile.close()
-            dbfile = create_dbfile(cfg_dir)
-            logging.debug("using db file %s", dbfile)
+        logging.info("[%d/%d, %s] uploading %s", i+1, len(files_to_upload), fmt_filesize(f.size), f.file_name)
         try:
             archive_id = vault.upload_archive(f.file_path, description=f.file_name)
         except Exception, e:
@@ -187,8 +194,17 @@ def backup(d):
             f.digest = calc_digest(f.file_path)
         f.archive_id = archive_id
         f.backup_time = time.time()
+
+        if i % cfg.dbfile_size == 0:
+            if dbfile is not None:
+                dbfile.close()
+            dbfile = create_dbfile(cfg_dir)
+            logging.debug("using db file %s", dbfile)
         f.write(dbfile)
-        logging.info("[%d/%d] %s uploaded", i+1, len(files_to_upload), f.file_name)
+
+        uploaded_size += f.size
+        logging.info("done: %s of %s (%.1f%%)", fmt_filesize(uploaded_size), fmt_filesize(total_size),
+            float(uploaded_size)/total_size*100)
 
 if __name__ == "__main__":
     level = logging.INFO
