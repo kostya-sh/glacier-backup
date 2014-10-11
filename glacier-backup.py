@@ -188,7 +188,7 @@ def backup(d):
         try:
             archive_id = vault.upload_archive(f.file_path, description=f.file_name)
         except Exception, e:
-            logging.warning("failed to upload %s: %s", file_name, e)
+            logging.warning("failed to upload %s: %s", f.file_name, e)
             continue
 
         if f.digest is None:
