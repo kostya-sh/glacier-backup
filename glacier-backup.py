@@ -183,7 +183,8 @@ def backup(d):
     dbfile = None
     uploaded_size = 0
     total_size = sum([f.size for f in files_to_upload])
-    for (i, f) in enumerate(files_to_upload):
+    i = 0
+    for f in files_to_upload:
         logging.info("[%d/%d, %s] uploading %s", i+1, len(files_to_upload), fmt_filesize(f.size), f.file_name)
         try:
             archive_id = vault.upload_archive(f.file_path, description=f.file_name)
@@ -202,6 +203,7 @@ def backup(d):
             dbfile = create_dbfile(cfg_dir)
             logging.debug("using db file %s", dbfile)
         f.write(dbfile)
+        i += 1
 
         uploaded_size += f.size
         logging.info("done: %s of %s (%.1f%%)", fmt_filesize(uploaded_size), fmt_filesize(total_size),
