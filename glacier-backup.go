@@ -43,16 +43,8 @@ func parseConfig(content io.Reader) (map[string]string, error) {
 	return r, lines.Err()
 }
 
-type config struct {
-	vault              string
-	awsAccessKeyId     string
-	awsSecretAccessKey string
-	proxy              string
-	proxyPort          int
-	region             string
-	dbfileSize         int
-}
-
+// parseConfigFile parses a file at path using parseConfig.
+// if path doesn't exist it returns an empty map.
 func parseConfigFile(path string) (map[string]string, error) {
 	file, err := os.Open(path)
 	if os.IsNotExist(err) {
@@ -65,61 +57,93 @@ func parseConfigFile(path string) (map[string]string, error) {
 	return parseConfig(file)
 }
 
-// configFor reads directory specific configuration by merging configuration
-// from the following files:
-//
-//  - dir/.glacier-backup/config
-//  - ~/.glacier-backup files
-func configFor(dir string) (config, error) {
-	cfg := config{}
-	usr, err := user.Current()
-	if err != nil {
-		return cfg, err
-	}
-	usrConfigFile := filepath.Join(usr.HomeDir, ".glacier-backup")
-	usrConfig, err := parseConfigFile(usrConfigFile)
-	if err != nil {
-		return cfg, fmt.Errorf("Failed to parse user config file %s: %s", usrConfigFile, err)
-	}
-	dirConfigFile := filepath.Join(dir, ".glacier-backup", "config")
-	dirConfig, err := parseConfigFile(dirConfigFile)
-	if err != nil {
-		return cfg, fmt.Errorf("Failed to parse dir config file %s: %s", dirConfigFile, err)
-	}
+type config struct {
+	vault              string
+	awsAccessKeyId     string
+	awsSecretAccessKey string
+	proxy              string
+	proxyPort          int
+	region             string
+	dbfileSize         int
+}
 
+func mergeAndValidateConfigs(main map[string]string, fallback map[string]string) (*config, error) {
 	getConf := func(key string) string {
-		v, ok := dirConfig[key]
+		v, ok := main[key]
 		if ok {
 			return v
 		}
-		v, ok = usrConfig[key]
+		v, _ = fallback[key]
 		return v
 	}
 
+	var err error
+	cfg := config{}
 	cfg.vault = getConf("vault")
+	if cfg.vault == "" {
+		return nil, fmt.Errorf("Required property 'vault' is not specified")
+	}
 	cfg.awsAccessKeyId = getConf("aws_access_key_id")
+	if cfg.awsAccessKeyId == "" {
+		return nil, fmt.Errorf("Required property 'aws_access_key_id' is not specified")
+	}
 	cfg.awsSecretAccessKey = getConf("aws_secret_access_key")
+	if cfg.awsSecretAccessKey == "" {
+		return nil, fmt.Errorf("Required property 'aws_secret_access_key' is not specified")
+	}
 	cfg.proxy = getConf("proxy")
 	proxyPort := getConf("proxy_port")
 	if len(proxyPort) != 0 {
 		cfg.proxyPort, err = strconv.Atoi(proxyPort)
 		if err != nil {
-			return cfg, fmt.Errorf("Invalid proxy_port value '%s'", proxyPort)
+			return nil, fmt.Errorf("Invalid proxy_port value '%s'", proxyPort)
 		}
 	}
 	cfg.region = getConf("region")
+	if cfg.region == "" {
+		cfg.region = "us-east-1"
+	}
 	dbfileSize := getConf("dbfile_size")
 	if len(dbfileSize) != 0 {
 		cfg.dbfileSize, err = strconv.Atoi(dbfileSize)
 		if err != nil {
-			return cfg, fmt.Errorf("Invalid dbfile_size value '%s'", dbfileSize)
+			return nil, fmt.Errorf("Invalid dbfile_size value '%s'", dbfileSize)
 		}
 	} else {
 		cfg.dbfileSize = 20
 	}
 
+	return &cfg, nil
+}
+
+// configFor reads directory specific configuration by merging configuration
+// from the following files:
+//
+//  - dir/.glacier-backup/config
+//  - ~/.glacier-backup files
+func configFor(dir string) (*config, error) {
+	usr, err := user.Current()
+	if err != nil {
+		return nil, err
+	}
+	usrConfigFile := filepath.Join(usr.HomeDir, ".glacier-backup")
+	usrConfig, err := parseConfigFile(usrConfigFile)
+	if err != nil {
+		return nil, fmt.Errorf("Failed to parse user config file %s: %s", usrConfigFile, err)
+	}
+	dirConfigFile := filepath.Join(dir, ".glacier-backup", "config")
+	dirConfig, err := parseConfigFile(dirConfigFile)
+	if err != nil {
+		return nil, fmt.Errorf("Failed to parse dir config file %s: %s", dirConfigFile, err)
+	}
+
+	cfg, err := mergeAndValidateConfigs(dirConfig, usrConfig)
+	if err != nil {
+		return nil, err
+	}
+
 	if verbose {
-		log.Printf("Combined configuration: %+v\n", cfg)
+		log.Printf("Combined configuration: %+v\n", *cfg)
 	}
 
 	return cfg, nil
