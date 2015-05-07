@@ -57,7 +57,7 @@ func parseConfigFile(path string) (map[string]string, error) {
 	return parseConfig(file)
 }
 
-type config struct {
+type appConfig struct {
 	vault              string
 	awsAccessKeyId     string
 	awsSecretAccessKey string
@@ -67,21 +67,21 @@ type config struct {
 	dbfileSize         int
 }
 
-func mergeAndValidateConfigs(main map[string]string, fallback map[string]string) (*config, error) {
+func mergeAndValidateConfigs(dirConfig map[string]string, usrConfig map[string]string) (*appConfig, error) {
 	getConf := func(key string) string {
-		v, ok := main[key]
+		v, ok := dirConfig[key]
 		if ok {
 			return v
 		}
-		v, _ = fallback[key]
+		v, _ = usrConfig[key]
 		return v
 	}
 
 	var err error
-	cfg := config{}
-	cfg.vault = getConf("vault")
+	cfg := appConfig{}
+	cfg.vault, _ = dirConfig["vault"] // "vault" is always read from dirConfig
 	if cfg.vault == "" {
-		return nil, fmt.Errorf("Required property 'vault' is not specified")
+		return nil, fmt.Errorf("Required property 'vault' is not specified in dir config")
 	}
 	cfg.awsAccessKeyId = getConf("aws_access_key_id")
 	if cfg.awsAccessKeyId == "" {
@@ -116,12 +116,12 @@ func mergeAndValidateConfigs(main map[string]string, fallback map[string]string)
 	return &cfg, nil
 }
 
-// configFor reads directory specific configuration by merging configuration
-// from the following files:
+// configFor reads directory specific application configuration by merging
+// configuration from the following files:
 //
 //  - dir/.glacier-backup/config
 //  - ~/.glacier-backup files
-func configFor(dir string) (*config, error) {
+func appConfigFor(dir string) (*appConfig, error) {
 	usr, err := user.Current()
 	if err != nil {
 		return nil, err
@@ -151,7 +151,7 @@ func configFor(dir string) (*config, error) {
 
 func backup(dir string) error {
 	log.Println("Backing up directory", dir)
-	if _, err := configFor(dir); err != nil {
+	if _, err := appConfigFor(dir); err != nil {
 		return err
 	}
 	return nil

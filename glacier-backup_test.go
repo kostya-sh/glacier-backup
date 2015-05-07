@@ -66,14 +66,37 @@ func TestParseInvalidConfig(t *testing.T) {
 	}
 }
 
+func TestParseConfigFile(t *testing.T) {
+	config, err := parseConfigFile("non existing file.txt")
+	if err != nil {
+		t.Errorf("Unexpected error for non existing file: %v", err)
+	}
+	if len(config) != 0 {
+		t.Errorf("Non empty map for non existing file: %+v", config)
+	}
+
+	config, err = parseConfigFile("config.sample")
+	if err != nil {
+		t.Errorf("Unexpected error while parsing config.sample: %v", err)
+	}
+	if len(config) != 6 {
+		t.Errorf("config.sample parsed to unexpected %+v", config)
+	}
+
+	config, err = parseConfigFile("glacier-backup.go")
+	if err == nil {
+		t.Errorf("Error expected while parsing glacier-backup.go")
+	}
+}
+
 func TestMergeAndValidateConfigs(t *testing.T) {
-	testData := []struct {
-		main     map[string]string
-		fallback map[string]string
-		expected config
+	testCases := []struct {
+		dirConfig map[string]string
+		usrConfig map[string]string
+		expected  appConfig
 	}{
 		{
-			// all form main
+			// all form dir
 			map[string]string{
 				"vault":                 "v",
 				"aws_access_key_id":     "key",
@@ -90,20 +113,19 @@ func TestMergeAndValidateConfigs(t *testing.T) {
 				"proxy_port":            "81",
 				"region":                "r2",
 				"dbfile_size":           "26"},
-			config{"v", "key", "pwd", "proxy", 80, "r", 25},
+			appConfig{"v", "key", "pwd", "proxy", 80, "r", 25},
 		},
 		{
-			// all form fallback
-			map[string]string{},
+			// all form user (but vault still should be taken from dir)
+			map[string]string{"vault": "v"},
 			map[string]string{
-				"vault":                 "v2",
 				"aws_access_key_id":     "key2",
 				"aws_secret_access_key": "pwd2",
 				"proxy":                 "proxy2",
 				"proxy_port":            "81",
 				"region":                "r2",
 				"dbfile_size":           "26"},
-			config{"v2", "key2", "pwd2", "proxy2", 81, "r2", 26},
+			appConfig{"v", "key2", "pwd2", "proxy2", 81, "r2", 26},
 		},
 		{
 			// mix main and fallback
@@ -114,28 +136,26 @@ func TestMergeAndValidateConfigs(t *testing.T) {
 				"region":      "r",
 				"dbfile_size": "25"},
 			map[string]string{
-				"vault":                 "v2",
 				"aws_access_key_id":     "key2",
 				"aws_secret_access_key": "pwd2",
 				"proxy":                 "proxy2",
 				"proxy_port":            "81",
 				"region":                "r2",
 				"dbfile_size":           "26"},
-			config{"v", "key2", "pwd2", "proxy", 80, "r", 25},
+			appConfig{"v", "key2", "pwd2", "proxy", 80, "r", 25},
 		},
 		{
 			// default values
-			map[string]string{},
+			map[string]string{"vault": "v"},
 			map[string]string{
-				"vault":                 "v2",
 				"aws_access_key_id":     "key2",
 				"aws_secret_access_key": "pwd2"},
-			config{"v2", "key2", "pwd2", "", 0, "us-east-1", 20},
+			appConfig{"v", "key2", "pwd2", "", 0, "us-east-1", 20},
 		},
 	}
 
-	for _, e := range testData {
-		actual, err := mergeAndValidateConfigs(e.main, e.fallback)
+	for _, e := range testCases {
+		actual, err := mergeAndValidateConfigs(e.dirConfig, e.usrConfig)
 		if err != nil {
 			t.Errorf("Unexpected error: %v", err)
 		}
@@ -146,7 +166,7 @@ func TestMergeAndValidateConfigs(t *testing.T) {
 }
 
 func TestMergeAndValidateInvalidConfigs(t *testing.T) {
-	invalidConfigs := []map[string]string{
+	invalidDirConfigs := []map[string]string{
 		map[string]string{"vault": "v", "aws_access_key_id": "key", "aws_secret_access_key": "pwd", "proxy_port": "nan"},
 		map[string]string{"vault": "v", "aws_access_key_id": "key", "aws_secret_access_key": "pwd", "dbfile_size": "nan"},
 		map[string]string{"aws_access_key_id": "key", "aws_secret_access_key": "pwd"},
@@ -154,14 +174,13 @@ func TestMergeAndValidateInvalidConfigs(t *testing.T) {
 		map[string]string{"vault": "v", "aws_access_key_id": "key"},
 	}
 
-	for _, configMap := range invalidConfigs {
-		_, err := mergeAndValidateConfigs(configMap, map[string]string{})
+	usrConfig := map[string]string{"vault": "v"}
+
+	for _, dirConfig := range invalidDirConfigs {
+		_, err := mergeAndValidateConfigs(dirConfig, usrConfig)
 		if err == nil {
-			t.Errorf("Expected error for main config %+v", configMap)
-		}
-		_, err = mergeAndValidateConfigs(map[string]string{}, configMap)
-		if err == nil {
-			t.Errorf("Expected error for fallback config %+v", configMap)
+			t.Errorf("Expected error for dir config %+v and user config %+v",
+				dirConfig, usrConfig)
 		}
 	}
 }
